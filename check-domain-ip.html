@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP & Vị trí Domain - Check Tools</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+</head>
+<body>
+  <div class="container">
+    
+    <a href="index.html" class="back-btn">← Quay lại</a>
+
+    <header class="tool-header">
+      <div class="tool-icon">🧭</div>
+      <h1>IP & Vị trí Domain</h1>
+      <p>Tra cứu địa chỉ IP và vị trí máy chủ của domain</p>
+    </header>
+
+    <div class="tool-box">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="domainInput" 
+          placeholder="Nhập domain (ví dụ: google.com)"
+          class="input-field"
+        />
+        <button id="checkDomainBtn" class="btn-primary">
+          <span id="btnText">Tra cứu</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="resultSection" class="domain-result-box hidden">
+      
+      <div class="domain-header">
+        <div class="domain-icon">🌐</div>
+        <div>
+          <div class="domain-name" id="domainName">-</div>
+          <div class="domain-ip" id="domainIP">-</div>
+        </div>
+      </div>
+
+      <div class="location-info">
+        <h3 class="section-title">📍 Vị trí máy chủ</h3>
+        <div class="info-grid">
+          
+          <div class="info-item">
+            <div class="info-icon">🌍</div>
+            <div>
+              <div class="info-label">Quốc gia</div>
+              <div id="country" class="info-value">-</div>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="info-icon">🗺️</div>
+            <div>
+              <div class="info-label">Khu vực</div>
+              <div id="region" class="info-value">-</div>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="info-icon">🏙️</div>
+            <div>
+              <div class="info-label">Thành phố</div>
+              <div id="city" class="info-value">-</div>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <div class="info-icon">🏢</div>
+            <div>
+              <div class="info-label">Nhà cung cấp (ISP)</div>
+              <div id="isp" class="info-value">-</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="additional-info">
+        <div class="info-row">
+          <span class="info-label">📊 Organization:</span>
+          <span id="org" class="info-value">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">📮 Postal Code:</span>
+          <span id="postal" class="info-value">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">🕐 Timezone:</span>
+          <span id="timezone" class="info-value">-</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="historySection" class="history-section hidden">
+      <div class="history-header">
+        <h3>📋 Lịch sử tra cứu</h3>
+        <button id="clearHistoryBtn" class="btn-clear">Xóa</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+
+  </div>
+
+  <script src="js/main.js"></script>
+  <script>
+    const domainInput = document.getElementById('domainInput');
+    const checkBtn = document.getElementById('checkDomainBtn');
+    const btnText = document.getElementById('btnText');
+    const resultSection = document.getElementById('resultSection');
+    const historySection = document.getElementById('historySection');
+    const historyList = document.getElementById('historyList');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem('domainCheckHistory') || '[]');
+    } catch (e) {
+      history = [];
+    }
+
+    domainInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') checkDomain();
+    });
+
+    checkBtn.addEventListener('click', checkDomain);
+    clearHistoryBtn.addEventListener('click', () => {
+      if (confirm('Xóa toàn bộ lịch sử?')) {
+        history = [];
+        localStorage.setItem('domainCheckHistory', '[]');
+        renderHistory();
+      }
+    });
+
+    async function checkDomain() {
+      let domain = domainInput.value.trim().toLowerCase();
+      if (!domain) {
+        alert('⚠️ Vui lòng nhập domain');
+        return;
+      }
+
+      domain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+      setLoading(true);
+      resultSection.classList.add('hidden');
+
+      try {
+        const response = await fetch(`/resolve?domain=${encodeURIComponent(domain)}`);
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Received non-JSON:', text.substring(0, 200));
+          throw new Error('Functions chưa được deploy. Vui lòng deploy bằng Wrangler CLI.');
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+          alert('❌ ' + data.error);
+          return;
+        }
+
+        displayResult(data);
+        addToHistory(data);
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Lỗi: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(loading) {
+      checkBtn.disabled = loading;
+      domainInput.disabled = loading;
+      btnText.textContent = loading ? 'Đang tra cứu...' : 'Tra cứu';
+    }
+
+    function displayResult(data) {
+      resultSection.classList.remove('hidden');
+
+      document.getElementById('domainName').textContent = data.domain;
+      document.getElementById('domainIP').textContent = data.ip;
+      document.getElementById('country').textContent = data.country || '-';
+      document.getElementById('region').textContent = data.region || '-';
+      document.getElementById('city').textContent = data.city || '-';
+      document.getElementById('isp').textContent = data.isp || '-';
+      document.getElementById('org').textContent = data.org || '-';
+      document.getElementById('postal').textContent = data.postal || '-';
+      document.getElementById('timezone').textContent = data.timezone || '-';
+    }
+
+    function addToHistory(data) {
+      const item = {
+        domain: data.domain,
+        ip: data.ip,
+        country: data.country,
+        city: data.city,
+        timestamp: new Date().toLocaleString('vi-VN')
+      };
+      
+      history.unshift(item);
+      history = history.slice(0, 10);
+      localStorage.setItem('domainCheckHistory', JSON.stringify(history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (history.length === 0) {
+        historySection.classList.add('hidden');
+        return;
+      }
+      
+      historySection.classList.remove('hidden');
+      historyList.innerHTML = history.map(item => `
+        <div class="history-item" onclick="domainInput.value='${escapeHtml(item.domain)}'; checkDomain();">
+          <div class="history-icon">🌐</div>
+          <div class="history-content">
+            <div class="history-url">${escapeHtml(item.domain)} → ${escapeHtml(item.ip)}</div>
+            <div class="history-time">${item.timestamp}</div>
+          </div>
+          <div class="history-meta">
+            ${escapeHtml(item.country || '')} ${escapeHtml(item.city || '')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    renderHistory();
+  </script>
+</body>
+</html>

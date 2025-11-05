@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP của bạn - Check Tools</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+<body>
+  <div class="container">
+    
+    <a href="index.html" class="back-btn">← Quay lại</a>
+
+    <header class="tool-header">
+      <div class="tool-icon">📡</div>
+      <h1>IP của bạn</h1>
+      <p>Xem địa chỉ IP công khai và thông tin thiết bị</p>
+    </header>
+
+    <div id="loadingBox" class="loading-box">
+      <div class="spinner"></div>
+      <p>Đang lấy thông tin IP...</p>
+    </div>
+
+    <div id="resultSection" class="ip-result-box hidden">
+      <div class="ip-display">
+        <div class="ip-label">Địa chỉ IP của bạn</div>
+        <div id="ipAddress" class="ip-value">-</div>
+        <button id="copyBtn" class="btn-copy" onclick="copyIP()">📋 Sao chép</button>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-icon">🌍</div>
+          <div>
+            <div class="info-label">Quốc gia</div>
+            <div id="country" class="info-value">-</div>
+          </div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-icon">📍</div>
+          <div>
+            <div class="info-label">Vị trí</div>
+            <div id="locationInfo" class="info-value">-</div>
+          </div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-icon">🏢</div>
+          <div>
+            <div class="info-label">Nhà cung cấp</div>
+            <div id="isp" class="info-value">-</div>
+          </div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-icon">💻</div>
+          <div>
+            <div class="info-label">Thiết bị</div>
+            <div id="device" class="info-value">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorSection" class="error-box hidden">
+      <div class="error-icon">⚠️</div>
+      <h3>Không thể lấy thông tin IP</h3>
+      <p id="errorMessage"></p>
+      <button onclick="window.location.reload()" class="btn-primary">Thử lại</button>
+    </div>
+
+  </div>
+
+  <script src="js/main.js"></script>
+  <script>
+    const loadingBox = document.getElementById('loadingBox');
+    const resultSection = document.getElementById('resultSection');
+    const errorSection = document.getElementById('errorSection');
+    const ipAddress = document.getElementById('ipAddress');
+    const country = document.getElementById('country');
+    const locationInfo = document.getElementById('locationInfo');
+    const isp = document.getElementById('isp');
+    const device = document.getElementById('device');
+    const errorMessage = document.getElementById('errorMessage');
+
+    async function getMyIP() {
+      try {
+        const response = await fetch('/ip');
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Received non-JSON:', text.substring(0, 200));
+          throw new Error('Functions chưa được deploy. Vui lòng deploy bằng Wrangler CLI.');
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        displayResult(data);
+      } catch (error) {
+        console.error('Error:', error);
+        showError(error.message);
+      }
+    }
+
+    function displayResult(data) {
+      loadingBox.classList.add('hidden');
+      resultSection.classList.remove('hidden');
+
+      ipAddress.textContent = data.ip || 'Không xác định';
+      country.textContent = getCountryName(data.countryCode || data.country) || 'Không xác định';
+      locationInfo.textContent = formatLocation(data) || 'Không xác định';
+      isp.textContent = data.org || data.isp || 'Không xác định';
+      device.textContent = getDeviceInfo(data.userAgent) || 'Không xác định';
+    }
+
+    function showError(message) {
+      loadingBox.classList.add('hidden');
+      errorSection.classList.remove('hidden');
+      errorMessage.textContent = message;
+    }
+
+    function getCountryName(code) {
+      const countries = {
+        'VN': '🇻🇳 Việt Nam',
+        'US': '🇺🇸 United States',
+        'GB': '🇬🇧 United Kingdom',
+        'JP': '🇯🇵 Japan',
+        'KR': '🇰🇷 South Korea',
+        'CN': '🇨🇳 China',
+        'SG': '🇸🇬 Singapore',
+        'TH': '🇹🇭 Thailand',
+      };
+      return countries[code] || code;
+    }
+
+    function formatLocation(data) {
+      const parts = [];
+      if (data.city) parts.push(data.city);
+      if (data.region) parts.push(data.region);
+      return parts.join(', ') || null;
+    }
+
+    function getDeviceInfo(ua) {
+      if (!ua) return null;
+      
+      if (/Mobile|Android|iPhone|iPad/i.test(ua)) {
+        if (/iPhone|iPad/i.test(ua)) return '📱 iOS Mobile';
+        if (/Android/i.test(ua)) return '📱 Android Mobile';
+        return '📱 Mobile';
+      }
+      
+      if (/Windows/i.test(ua)) return '🖥️ Windows PC';
+      if (/Mac/i.test(ua)) return '🖥️ macOS';
+      if (/Linux/i.test(ua)) return '🖥️ Linux';
+      
+      return '💻 Desktop';
+    }
+
+    function copyIP() {
+      const ip = ipAddress.textContent;
+      navigator.clipboard.writeText(ip).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Đã sao chép!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 2000);
+      });
+    }
+
+    getMyIP();
+  </script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kiểm tra Website - Check Tools</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+</head>
+<body>
+  <div class="container">
+    
+    <a href="index.html" class="back-btn">← Quay lại</a>
+
+    <header class="tool-header">
+      <div class="tool-icon">🌐</div>
+      <h1>Kiểm tra Website</h1>
+      <p>Kiểm tra xem website có đang hoạt động hay không</p>
+    </header>
+
+    <div class="tool-box">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="websiteUrl" 
+          placeholder="Nhập URL (ví dụ: google.com hoặc https://example.com)"
+          class="input-field"
+        />
+        <button id="checkWebsiteBtn" class="btn-primary">
+          <span id="btnText">Kiểm tra</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="resultSection" class="result-box hidden">
+      <div class="result-header">
+        <div id="resultIcon" class="result-icon"></div>
+        <div>
+          <h3 id="resultTitle" class="result-title"></h3>
+          <p id="resultUrl" class="result-url"></p>
+        </div>
+      </div>
+      <div id="resultDetails" class="result-details"></div>
+    </div>
+
+    <div id="historySection" class="history-section hidden">
+      <div class="history-header">
+        <h3>📋 Lịch sử kiểm tra</h3>
+        <button id="clearHistoryBtn" class="btn-clear">Xóa</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+
+  </div>
+
+  <script src="js/main.js"></script>
+  <script>
+    const urlInput = document.getElementById('websiteUrl');
+    const checkBtn = document.getElementById('checkWebsiteBtn');
+    const btnText = document.getElementById('btnText');
+    const resultSection = document.getElementById('resultSection');
+    const resultIcon = document.getElementById('resultIcon');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultUrl = document.getElementById('resultUrl');
+    const resultDetails = document.getElementById('resultDetails');
+    const historySection = document.getElementById('historySection');
+    const historyList = document.getElementById('historyList');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    let history = [];
+    try {
+      history = JSON.parse(localStorage.getItem('websiteCheckHistory') || '[]');
+    } catch (e) {
+      history = [];
+    }
+
+    urlInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') checkWebsite();
+    });
+
+    checkBtn.addEventListener('click', checkWebsite);
+    clearHistoryBtn.addEventListener('click', () => {
+      if (confirm('Xóa toàn bộ lịch sử?')) {
+        history = [];
+        localStorage.setItem('websiteCheckHistory', '[]');
+        renderHistory();
+      }
+    });
+
+    async function checkWebsite() {
+      let url = urlInput.value.trim();
+      if (!url) {
+        alert('⚠️ Vui lòng nhập URL');
+        return;
+      }
+
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      setLoading(true);
+      resultSection.classList.add('hidden');
+
+      try {
+        const response = await fetch(`/check?url=${encodeURIComponent(url)}`);
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Received non-JSON:', text.substring(0, 200));
+          throw new Error('Functions chưa được deploy. Vui lòng deploy bằng Wrangler CLI.');
+        }
+        
+        const data = await response.json();
+        displayResult(data);
+        addToHistory(data);
+      } catch (error) {
+        console.error('Error:', error);
+        displayResult({
+          url,
+          status: 'down',
+          error: error.message
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(loading) {
+      checkBtn.disabled = loading;
+      urlInput.disabled = loading;
+      btnText.textContent = loading ? 'Đang kiểm tra...' : 'Kiểm tra';
+    }
+
+    function displayResult(data) {
+      resultSection.classList.remove('hidden');
+      
+      if (data.up || data.status === 'up') {
+        resultIcon.innerHTML = '✅';
+        resultIcon.className = 'result-icon success';
+        resultTitle.textContent = 'Website đang hoạt động';
+        resultTitle.className = 'result-title success';
+        
+        resultDetails.innerHTML = `
+          <div class="detail-item">
+            <span class="detail-label">HTTP Status:</span>
+            <span class="detail-value">${data.http_code || data.status}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Thời gian phản hồi:</span>
+            <span class="detail-value">${data.response_time || data.timeFormatted || data.time + 'ms'}</span>
+          </div>
+        `;
+      } else {
+        resultIcon.innerHTML = '❌';
+        resultIcon.className = 'result-icon error';
+        resultTitle.textContent = 'Website không truy cập được';
+        resultTitle.className = 'result-title error';
+        
+        resultDetails.innerHTML = `
+          <div class="detail-item">
+            <span class="detail-label">Lỗi:</span>
+            <span class="detail-value">${data.error || 'Không thể kết nối'}</span>
+          </div>
+        `;
+      }
+      
+      resultUrl.textContent = data.url;
+    }
+
+    function addToHistory(data) {
+      const item = {
+        ...data,
+        timestamp: new Date().toLocaleString('vi-VN')
+      };
+      
+      history.unshift(item);
+      history = history.slice(0, 10);
+      localStorage.setItem('websiteCheckHistory', JSON.stringify(history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (history.length === 0) {
+        historySection.classList.add('hidden');
+        return;
+      }
+      
+      historySection.classList.remove('hidden');
+      historyList.innerHTML = history.map(item => {
+        const isUp = item.up || item.status === 'up';
+        return `
+          <div class="history-item" onclick="urlInput.value='${escapeHtml(item.url)}'; checkWebsite();">
+            <div class="history-icon">${isUp ? '✅' : '❌'}</div>
+            <div class="history-content">
+              <div class="history-url">${escapeHtml(item.url)}</div>
+              <div class="history-time">${item.timestamp}</div>
+            </div>
+            <div class="history-meta">
+              ${isUp ? (item.response_time || item.timeFormatted || '') : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    renderHistory();
+  </script>
+</body>
+</html>
